@@ -581,6 +581,7 @@ static uint8_t direction_angle = 0;
 static int8_t direction = -1;
 static bool is_direction_changed = false;
 // ========== END DYNAMIC ANGLE DETECTION VARIABLES ==========
+
 // ========== DYNAMIC ANGLE DETECTION FUNCTIONS ==========
 // Source: https://github.com/karbou12/zmk-pmw3610-driver
 
