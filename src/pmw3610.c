@@ -24,7 +24,12 @@
 #include <zmk/events/position_state_changed.h>
 #include <zmk/events/layer_state_changed.h>
 #include "pmw3610.h"
+#define _USE_MATH_DEFINES
 #include <math.h>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(pmw3610, CONFIG_INPUT_LOG_LEVEL);
