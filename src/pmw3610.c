@@ -30,8 +30,12 @@ LOG_MODULE_REGISTER(pmw3610, CONFIG_INPUT_LOG_LEVEL);
 
 #include <math.h>
 
-#define DIRECTION_THRESHOLD 100
-#define DIRECTION_ANGLE_STEP 90  // 90度単位での角度切り替え
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+#define DIRECTION_THRESHOLD CONFIG_PMW3610_DIRECTION_THRESHOLD
+#define DIRECTION_ANGLE_STEP CONFIG_PMW3610_DIRECTION_ANGLE_STEP
 
 
 //////// Sensor initialization steps definition //////////
@@ -583,12 +587,10 @@ static uint16_t detect_direction(int32_t delta_x, int32_t delta_y) {
         return 0xFFFF; // No direction detected
     }
     
-    double angle = atan2(delta_y, delta_x) * 180.0 / M_PI;
-    if (angle < 0) angle += 360.0;
-    
-    // 下から上へのトラックボール回転を検出 (270度方向、つまり-Y方向)
-    if (angle >= 225 && angle <= 315) {
-        return (uint16_t)angle;
+    // 下から上への回転を検出（-Y方向が強い場合）
+    // 単純な方向検出：絶対値で比較
+    if (abs(delta_y) > abs(delta_x) && delta_y < 0) {
+        return 270; // 上向き
     }
     
     return 0xFFFF; // 指定方向以外
@@ -597,15 +599,27 @@ static uint16_t detect_direction(int32_t delta_x, int32_t delta_y) {
 static void rotate_coordinates(int16_t *x, int16_t *y, uint16_t angle_deg) {
     if (angle_deg == 0) return;
     
-    double angle_rad = angle_deg * M_PI / 180.0;
-    double cos_val = cos(angle_rad);
-    double sin_val = sin(angle_rad);
-    
+    // 90度単位での回転のみをサポート（浮動小数点演算を避ける）
     int16_t orig_x = *x;
     int16_t orig_y = *y;
     
-    *x = (int16_t)(orig_x * cos_val - orig_y * sin_val);
-    *y = (int16_t)(orig_x * sin_val + orig_y * cos_val);
+    switch (angle_deg) {
+    case 90:
+        *x = -orig_y;
+        *y = orig_x;
+        break;
+    case 180:
+        *x = -orig_x;
+        *y = -orig_y;
+        break;
+    case 270:
+        *x = orig_y;
+        *y = -orig_x;
+        break;
+    default:
+        // その他の角度は無視
+        break;
+    }
 }
 
 static enum pixart_input_mode get_input_mode_for_current_layer(const struct device *dev) {
