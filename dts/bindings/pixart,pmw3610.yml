@@ -18,6 +18,10 @@ properties:
   automouse-layer:
     type: int
     default: -1
+  direction-detect-layers:
+    type: array
+    default: [6]
+    description: "Layers on which direction detection is active"
 
 child-binding:
   description: "Invoke behaviors when the track ball is moved on specific layers"

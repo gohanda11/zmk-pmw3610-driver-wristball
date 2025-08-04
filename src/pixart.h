@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-enum pixart_input_mode { MOVE = 0, SCROLL, SNIPE, BALL_ACTION };
+enum pixart_input_mode { MOVE = 0, SCROLL, SNIPE, BALL_ACTION, DIRECTION_DETECT };
 
 /* device data structure */
 struct pixart_data {
@@ -50,6 +50,11 @@ struct pixart_data {
 
     // for pmw3610 smart algorithm
     bool sw_smart_flag;
+    
+    // for direction detection and switching
+    int32_t direction_delta_x;
+    int32_t direction_delta_y;
+    uint16_t current_rotation_angle;
 };
 
 // ball action config data structure
@@ -74,6 +79,8 @@ struct pixart_config {
     int32_t *snipe_layers;
     struct ball_action_cfg **ball_actions;
     size_t ball_actions_len;
+    size_t direction_detect_layers_len;
+    int32_t *direction_detect_layers;
 };
 
 #ifdef __cplusplus
