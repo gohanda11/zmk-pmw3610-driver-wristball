@@ -698,12 +698,12 @@ static void rotate_point(const int16_t raw_x, const int16_t raw_y, const int16_t
         -0.139173, -0.121869, -0.104528, -0.087156, -0.069756, -0.052336, -0.034899, -0.017452
     };
 
-    *x = (int16_t)(raw_x * cos_tbl[degree] - raw_y * sin_tbl[degree]);
-    *y = (int16_t)(raw_x * sin_tbl[degree] + raw_y * cos_tbl[degree]);
+    *x = (int16_t)(raw_x * cos_tbl[degree] + raw_y * sin_tbl[degree]);
+    *y = (int16_t)(-raw_x * sin_tbl[degree] + raw_y * cos_tbl[degree]);
 #else
     const double radian = degree * (M_PI / 180);
-    *x = (int16_t)(raw_x * cos(radian) - raw_y * sin(radian));
-    *y = (int16_t)(raw_x * sin(radian) + raw_y * cos(radian));
+    *x = (int16_t)(raw_x * cos(radian) + raw_y * sin(radian));
+    *y = (int16_t)(-raw_x * sin(radian) + raw_y * cos(radian));
 #endif
 }
 
