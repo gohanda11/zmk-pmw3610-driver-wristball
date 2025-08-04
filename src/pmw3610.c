@@ -24,12 +24,6 @@
 #include <zmk/events/position_state_changed.h>
 #include <zmk/events/layer_state_changed.h>
 #include "pmw3610.h"
-#define _USE_MATH_DEFINES
-#include <math.h>
-
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(pmw3610, CONFIG_INPUT_LOG_LEVEL);
@@ -578,201 +572,6 @@ K_TIMER_DEFINE(automouse_layer_timer, deactivate_automouse_layer, NULL);
 #endif
 
 int ball_action_idx = -1;
-
-// ========== DYNAMIC ANGLE DETECTION VARIABLES ==========
-// Source: https://github.com/karbou12/zmk-pmw3610-driver
-static uint8_t last_orientation_layer = 0;
-static uint8_t direction_angle = 0;
-static int8_t direction = -1;
-static bool is_direction_changed = false;
-// ========== END DYNAMIC ANGLE DETECTION VARIABLES ==========
-
-// ========== DYNAMIC ANGLE DETECTION FUNCTIONS ==========
-// Source: https://github.com/karbou12/zmk-pmw3610-driver
-
-static int16_t calc_angle_for_direction(const int8_t direction) {
-    return (direction == -1) ? last_orientation_layer * 45 : direction * direction_angle;
-}
-
-static int16_t calc_angle_in_range(const int16_t degree) {
-    const int16_t angle = (int16_t)fmod((double)degree, 360.0f);
-    return (angle >= 0) ? angle : angle + 360;
-}
-
-#define USE_LUT
-static void rotate_point(const int16_t raw_x, const int16_t raw_y, const int16_t degree, int16_t* x, int16_t* y) {
-#ifdef USE_LUT
-    static const double cos_tbl[] = {
-        1.0, 0.999848, 0.999391, 0.998630, 0.997564, 0.996195, 0.994522, 0.992546,
-        0.990268, 0.987688, 0.984808, 0.981627, 0.978148, 0.974370, 0.970296, 0.965926,
-        0.961262, 0.956305, 0.951057, 0.945519, 0.939693, 0.933580, 0.927184, 0.920505,
-        0.913545, 0.906308, 0.898794, 0.891007, 0.882948, 0.874620, 0.866025, 0.857167,
-        0.848048, 0.838671, 0.829038, 0.819152, 0.809017, 0.798636, 0.788011, 0.777146,
-        0.766044, 0.754710, 0.743145, 0.731354, 0.719340, 0.707107, 0.694658, 0.681998,
-        0.669131, 0.656059, 0.642788, 0.629320, 0.615661, 0.601815, 0.587785, 0.573576,
-        0.559193, 0.544639, 0.529919, 0.515038, 0.500000, 0.484810, 0.469472, 0.453990,
-        0.438371, 0.422618, 0.406737, 0.390731, 0.374607, 0.358368, 0.342020, 0.325568,
-        0.309017, 0.292372, 0.275637, 0.258819, 0.241922, 0.224951, 0.207912, 0.190809,
-        0.173648, 0.156434, 0.139173, 0.121869, 0.104528, 0.087156, 0.069756, 0.052336,
-        0.034899, 0.017452, 0.000000, -0.017452, -0.034899, -0.052336, -0.069756, -0.087156,
-        -0.104528, -0.121869, -0.139173, -0.156434, -0.173648, -0.190809, -0.207912, -0.224951,
-        -0.241922, -0.258819, -0.275637, -0.292372, -0.309017, -0.325568, -0.342020, -0.358368,
-        -0.374607, -0.390731, -0.406737, -0.422618, -0.438371, -0.453990, -0.469472, -0.484810,
-        -0.500000, -0.515038, -0.529919, -0.544639, -0.559193, -0.573576, -0.587785, -0.601815,
-        -0.615661, -0.629320, -0.642788, -0.656059, -0.669131, -0.681998, -0.694658, -0.707107,
-        -0.719340, -0.731354, -0.743145, -0.754710, -0.766044, -0.777146, -0.788011, -0.798636,
-        -0.809017, -0.819152, -0.829038, -0.838671, -0.848048, -0.857167, -0.866025, -0.874620,
-        -0.882948, -0.891007, -0.898794, -0.906308, -0.913545, -0.920505, -0.927184, -0.933580,
-        -0.939693, -0.945519, -0.951057, -0.956305, -0.961262, -0.965926, -0.970296, -0.974370,
-        -0.978148, -0.981627, -0.984808, -0.987688, -0.990268, -0.992546, -0.994522, -0.996195,
-        -0.997564, -0.998630, -0.999391, -0.999848, -1.0, -0.999848, -0.999391, -0.998630,
-        -0.997564, -0.996195, -0.994522, -0.992546, -0.990268, -0.987688, -0.984808, -0.981627,
-        -0.978148, -0.974370, -0.970296, -0.965926, -0.961262, -0.956305, -0.951057, -0.945519,
-        -0.939693, -0.933580, -0.927184, -0.920505, -0.913545, -0.906308, -0.898794, -0.891007,
-        -0.882948, -0.874620, -0.866025, -0.857167, -0.848048, -0.838671, -0.829038, -0.819152,
-        -0.809017, -0.798636, -0.788011, -0.777146, -0.766044, -0.754710, -0.743145, -0.731354,
-        -0.719340, -0.707107, -0.694658, -0.681998, -0.669131, -0.656059, -0.642788, -0.629320,
-        -0.615661, -0.601815, -0.587785, -0.573576, -0.559193, -0.544639, -0.529919, -0.515038,
-        -0.500000, -0.484810, -0.469472, -0.453990, -0.438371, -0.422618, -0.406737, -0.390731,
-        -0.374607, -0.358368, -0.342020, -0.325568, -0.309017, -0.292372, -0.275637, -0.258819,
-        -0.241922, -0.224951, -0.207912, -0.190809, -0.173648, -0.156434, -0.139173, -0.121869,
-        -0.104528, -0.087156, -0.069756, -0.052336, -0.034899, -0.017452, -0.000000, 0.017452,
-        0.034899, 0.052336, 0.069756, 0.087156, 0.104528, 0.121869, 0.139173, 0.156434,
-        0.173648, 0.190809, 0.207912, 0.224951, 0.241922, 0.258819, 0.275637, 0.292372,
-        0.309017, 0.325568, 0.342020, 0.358368, 0.374607, 0.390731, 0.406737, 0.422618,
-        0.438371, 0.453990, 0.469472, 0.484810, 0.500000, 0.515038, 0.529919, 0.544639,
-        0.559193, 0.573576, 0.587785, 0.601815, 0.615661, 0.629320, 0.642788, 0.656059,
-        0.669131, 0.681998, 0.694658, 0.707107, 0.719340, 0.731354, 0.743145, 0.754710,
-        0.766044, 0.777146, 0.788011, 0.798636, 0.809017, 0.819152, 0.829038, 0.838671,
-        0.848048, 0.857167, 0.866025, 0.874620, 0.882948, 0.891007, 0.898794, 0.906308,
-        0.913545, 0.920505, 0.927184, 0.933580, 0.939693, 0.945519, 0.951057, 0.956305,
-        0.961262, 0.965926, 0.970296, 0.974370, 0.978148, 0.981627, 0.984808, 0.987688,
-        0.990268, 0.992546, 0.994522, 0.996195, 0.997564, 0.998630, 0.999391, 0.999848
-    };
-
-    static const double sin_tbl[] = {
-        0.0, 0.017452, 0.034899, 0.052336, 0.069756, 0.087156, 0.104528, 0.121869,
-        0.139173, 0.156434, 0.173648, 0.190809, 0.207912, 0.224951, 0.241922, 0.258819,
-        0.275637, 0.292372, 0.309017, 0.325568, 0.342020, 0.358368, 0.374607, 0.390731,
-        0.406737, 0.422618, 0.438371, 0.453990, 0.469472, 0.484810, 0.500000, 0.515038,
-        0.529919, 0.544639, 0.559193, 0.573576, 0.587785, 0.601815, 0.615661, 0.629320,
-        0.642788, 0.656059, 0.669131, 0.681998, 0.694658, 0.707107, 0.719340, 0.731354,
-        0.743145, 0.754710, 0.766044, 0.777146, 0.788011, 0.798636, 0.809017, 0.819152,
-        0.829038, 0.838671, 0.848048, 0.857167, 0.866025, 0.874620, 0.882948, 0.891007,
-        0.898794, 0.906308, 0.913545, 0.920505, 0.927184, 0.933580, 0.939693, 0.945519,
-        0.951057, 0.956305, 0.961262, 0.965926, 0.970296, 0.974370, 0.978148, 0.981627,
-        0.984808, 0.987688, 0.990268, 0.992546, 0.994522, 0.996195, 0.997564, 0.998630,
-        0.999391, 0.999848, 1.0, 0.999848, 0.999391, 0.998630, 0.997564, 0.996195,
-        0.994522, 0.992546, 0.990268, 0.987688, 0.984808, 0.981627, 0.978148, 0.974370,
-        0.970296, 0.965926, 0.961262, 0.956305, 0.951057, 0.945519, 0.939693, 0.933580,
-        0.927184, 0.920505, 0.913545, 0.906308, 0.898794, 0.891007, 0.882948, 0.874620,
-        0.866025, 0.857167, 0.848048, 0.838671, 0.829038, 0.819152, 0.809017, 0.798636,
-        0.788011, 0.777146, 0.766044, 0.754710, 0.743145, 0.731354, 0.719340, 0.707107,
-        0.694658, 0.681998, 0.669131, 0.656059, 0.642788, 0.629320, 0.615661, 0.601815,
-        0.587785, 0.573576, 0.559193, 0.544639, 0.529919, 0.515038, 0.500000, 0.484810,
-        0.469472, 0.453990, 0.438371, 0.422618, 0.406737, 0.390731, 0.374607, 0.358368,
-        0.342020, 0.325568, 0.309017, 0.292372, 0.275637, 0.258819, 0.241922, 0.224951,
-        0.207912, 0.190809, 0.173648, 0.156434, 0.139173, 0.121869, 0.104528, 0.087156,
-        0.069756, 0.052336, 0.034899, 0.017452, 0.000000, -0.017452, -0.034899, -0.052336,
-        -0.069756, -0.087156, -0.104528, -0.121869, -0.139173, -0.156434, -0.173648, -0.190809,
-        -0.207912, -0.224951, -0.241922, -0.258819, -0.275637, -0.292372, -0.309017, -0.325568,
-        -0.342020, -0.358368, -0.374607, -0.390731, -0.406737, -0.422618, -0.438371, -0.453990,
-        -0.469472, -0.484810, -0.500000, -0.515038, -0.529919, -0.544639, -0.559193, -0.573576,
-        -0.587785, -0.601815, -0.615661, -0.629320, -0.642788, -0.656059, -0.669131, -0.681998,
-        -0.694658, -0.707107, -0.719340, -0.731354, -0.743145, -0.754710, -0.766044, -0.777146,
-        -0.788011, -0.798636, -0.809017, -0.819152, -0.829038, -0.838671, -0.848048, -0.857167,
-        -0.866025, -0.874620, -0.882948, -0.891007, -0.898794, -0.906308, -0.913545, -0.920505,
-        -0.927184, -0.933580, -0.939693, -0.945519, -0.951057, -0.956305, -0.961262, -0.965926,
-        -0.970296, -0.974370, -0.978148, -0.981627, -0.984808, -0.987688, -0.990268, -0.992546,
-        -0.994522, -0.996195, -0.997564, -0.998630, -0.999391, -0.999848, -1.0, -0.999848,
-        -0.999391, -0.998630, -0.997564, -0.996195, -0.994522, -0.992546, -0.990268, -0.987688,
-        -0.984808, -0.981627, -0.978148, -0.974370, -0.970296, -0.965926, -0.961262, -0.956305,
-        -0.951057, -0.945519, -0.939693, -0.933580, -0.927184, -0.920505, -0.913545, -0.906308,
-        -0.898794, -0.891007, -0.882948, -0.874620, -0.866025, -0.857167, -0.848048, -0.838671,
-        -0.829038, -0.819152, -0.809017, -0.798636, -0.788011, -0.777146, -0.766044, -0.754710,
-        -0.743145, -0.731354, -0.719340, -0.707107, -0.694658, -0.681998, -0.669131, -0.656059,
-        -0.642788, -0.629320, -0.615661, -0.601815, -0.587785, -0.573576, -0.559193, -0.544639,
-        -0.529919, -0.515038, -0.500000, -0.484810, -0.469472, -0.453990, -0.438371, -0.422618,
-        -0.406737, -0.390731, -0.374607, -0.358368, -0.342020, -0.325568, -0.309017, -0.292372,
-        -0.275637, -0.258819, -0.241922, -0.224951, -0.207912, -0.190809, -0.173648, -0.156434,
-        -0.139173, -0.121869, -0.104528, -0.087156, -0.069756, -0.052336, -0.034899, -0.017452
-    };
-
-    *x = (int16_t)(raw_x * cos_tbl[degree] + raw_y * sin_tbl[degree]);
-    *y = (int16_t)(-raw_x * sin_tbl[degree] + raw_y * cos_tbl[degree]);
-#else
-    const double radian = degree * (M_PI / 180);
-    *x = (int16_t)(raw_x * cos(radian) + raw_y * sin(radian));
-    *y = (int16_t)(-raw_x * sin(radian) + raw_y * cos(radian));
-#endif
-}
-
-static int8_t detect_direction(const int16_t cur_x, const int16_t cur_y, const int8_t prev_direction) {
-    static int16_t x = 0;
-    static int16_t y = 0;
-    static int64_t prev_time = 0;
-
-    int64_t curr_time = k_uptime_get();
-
-    if (prev_time == 0) {
-        prev_time = curr_time;
-        x = cur_x;
-        y = cur_y;
-        return prev_direction;
-    }
-
-    x += cur_x;
-    y += cur_y;
-
-    if ((curr_time - prev_time) < CONFIG_PMW3610_DIRECTION_DETECTION_SAMPLE_TIME_MS) {
-        return prev_direction;
-    }
-
-    const double distance = pow(x, 2) + pow(y, 2);
-    double radian = atan2(y, x);
-    if (radian < 0) {
-        radian = radian + 2 * M_PI;
-    }
-
-    prev_time = 0;
-    x = 0;
-    y = 0;
-
-    int16_t angle = (int16_t)(radian * 360 / (2 * M_PI));
-
-    bool is_shift_mode = false;
-
-    if (CONFIG_PMW3610_DIRECTION_SHIFT_THRESHOLD > 0) {
-        if (distance < pow(CONFIG_PMW3610_DIRECTION_SHIFT_THRESHOLD, 2)) {
-            return prev_direction;
-        } else if (distance < pow(CONFIG_PMW3610_DIRECTION_DETECTION_DISTANCE_THRESHOLD, 2)) {
-            is_shift_mode = true;
-        }
-    } else if (distance < pow(CONFIG_PMW3610_DIRECTION_DETECTION_DISTANCE_THRESHOLD, 2)) {
-        return prev_direction;
-    }
-
-    if (is_shift_mode) {
-        const int16_t cur_angle = calc_angle_in_range(angle - calc_angle_for_direction(prev_direction));
-        const int8_t max_direction = 360 / direction_angle;
-        const int8_t cur_direction = (prev_direction != -1) ? prev_direction
-            : (int8_t)(last_orientation_layer * (max_direction / 8.0));
-        const int8_t next_direction = (cur_angle < 90 || 270 < cur_angle) ? cur_direction - 1 : cur_direction + 1;
-
-        return (next_direction < 0) ? max_direction - 1
-            : (max_direction <= next_direction) ? 0
-            : next_direction;
-    }
-
-    angle -= 270;
-    angle += (int16_t)(direction_angle / 2);
-    angle = calc_angle_in_range(angle);
-
-    return (int8_t)(angle / direction_angle);
-}
-
-// ========== END DYNAMIC ANGLE DETECTION FUNCTIONS ==========
-
 static enum pixart_input_mode get_input_mode_for_current_layer(const struct device *dev) {
     const struct pixart_config *config = dev->config;
     uint8_t curr_layer = zmk_keymap_highest_layer_active();
@@ -810,16 +609,6 @@ static int pmw3610_report_data(const struct device *dev) {
     int32_t dividor;
     enum pixart_input_mode input_mode = get_input_mode_for_current_layer(dev);
     bool input_mode_changed = data->curr_mode != input_mode;
-    
-    // ========== DYNAMIC ANGLE DETECTION - LAYER TRACKING ==========
-    // Source: https://github.com/karbou12/zmk-pmw3610-driver
-    uint8_t current_layer = zmk_keymap_highest_layer_active();
-    
-    if (input_mode == MOVE && (current_layer != CONFIG_PMW3610_DIRECTION_DETECTION_LAYER)) {
-        last_orientation_layer = current_layer;
-    }
-    // ========== END DYNAMIC ANGLE DETECTION - LAYER TRACKING ==========
-    
     switch (input_mode) {
     case MOVE:
         set_cpi_if_needed(dev, CONFIG_PMW3610_CPI);
@@ -873,47 +662,19 @@ static int pmw3610_report_data(const struct device *dev) {
     int16_t raw_y =
         TOINT16((buf[PMW3610_Y_L_POS] + ((buf[PMW3610_XY_H_POS] & 0x0F) << 8)), 12) / dividor;
 
-    // ========== DYNAMIC ANGLE DETECTION - DIRECTION DETECTION ==========
-    // Source: https://github.com/karbou12/zmk-pmw3610-driver
-    if (input_mode == MOVE) {
-        if (zmk_keymap_highest_layer_active() == CONFIG_PMW3610_DIRECTION_DETECTION_LAYER) {
-            if (is_direction_changed) {
-                return 0;  // Block trackball movement during direction detection
-            }
-
-            const int8_t detected_direction = detect_direction(raw_x, raw_y, direction);
-            if (direction != detected_direction) {
-                direction = detected_direction;
-                is_direction_changed = true;
-            }
-
-            return 0;  // Exit early, preventing normal movement
-        } else {
-            is_direction_changed = false;
-        }
+    if (IS_ENABLED(CONFIG_PMW3610_ORIENTATION_0)) {
+        x = -raw_x;
+        y = raw_y;
+    } else if (IS_ENABLED(CONFIG_PMW3610_ORIENTATION_90)) {
+        x = raw_y;
+        y = -raw_x;
+    } else if (IS_ENABLED(CONFIG_PMW3610_ORIENTATION_180)) {
+        x = raw_x;
+        y = -raw_y;
+    } else if (IS_ENABLED(CONFIG_PMW3610_ORIENTATION_270)) {
+        x = -raw_y;
+        y = raw_x;
     }
-
-    // Apply dynamic rotation if angle was detected
-    if (direction != -1) {
-        int16_t angle = calc_angle_for_direction(direction);
-        rotate_point(raw_x, raw_y, angle, &x, &y);
-    } else {
-        // Use static orientation configuration
-        if (IS_ENABLED(CONFIG_PMW3610_ORIENTATION_0)) {
-            x = -raw_x;
-            y = raw_y;
-        } else if (IS_ENABLED(CONFIG_PMW3610_ORIENTATION_90)) {
-            x = raw_y;
-            y = -raw_x;
-        } else if (IS_ENABLED(CONFIG_PMW3610_ORIENTATION_180)) {
-            x = raw_x;
-            y = -raw_y;
-        } else if (IS_ENABLED(CONFIG_PMW3610_ORIENTATION_270)) {
-            x = -raw_y;
-            y = raw_x;
-        }
-    }
-    // ========== END DYNAMIC ANGLE DETECTION - DIRECTION DETECTION ==========
 
     if (IS_ENABLED(CONFIG_PMW3610_INVERT_X)) {
         x = -x;
@@ -1090,19 +851,6 @@ static int pmw3610_init(const struct device *dev) {
 
     // init smart algorithm flag;
     data->sw_smart_flag = false;
-    
-    // ========== DYNAMIC ANGLE DETECTION - INITIALIZATION ==========
-    // Source: https://github.com/karbou12/zmk-pmw3610-driver
-    
-    // Initialize direction angle
-    direction_angle = CONFIG_PMW3610_DIRECTION_ANGLE;
-    while(360 % direction_angle != 0) {
-        direction_angle++;
-    };
-
-    // Set default layer
-    last_orientation_layer = 0;
-    // ========== END DYNAMIC ANGLE DETECTION - INITIALIZATION ==========
 
     // init trigger handler work
     k_work_init(&data->trigger_work, pmw3610_work_callback);

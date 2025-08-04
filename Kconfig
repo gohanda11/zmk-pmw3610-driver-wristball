@@ -167,50 +167,6 @@ config PMW3610_MOVEMENT_THRESHOLD
         A higher value means more movement is required to activate the mouse layer.
         This helps prevent accidental activation during typing.
 
-# ========== DYNAMIC ANGLE DETECTION CONFIGURATION ==========
-# Source: https://github.com/karbou12/zmk-pmw3610-driver
-# Implementation of layer 11 trackball rotation for dynamic angle adjustment
-
-config PMW3610_DIRECTION_DETECTION_LAYER
-    int "Layer to enable direction detection"
-    default 6
-    help
-        Layer number where dynamic angle detection is active.
-        On this layer, trackball movements are interpreted as angle adjustment gestures
-        instead of normal mouse movements.
-
-config PMW3610_DIRECTION_ANGLE
-    int "Angle of each direction"
-    default 45
-    range 3 45
-    help
-        The angle step for each direction in degrees.
-        Must be a divisor of 360 for proper operation.
-        
-config PMW3610_DIRECTION_DETECTION_SAMPLE_TIME_MS
-    int "Sample time for direction detection"
-    default 100
-    help
-        Time window in milliseconds for accumulating trackball movement
-        before calculating the direction angle.
-
-config PMW3610_DIRECTION_DETECTION_DISTANCE_THRESHOLD
-    int "Threshold of distance for direction detection"
-    default 100
-    help
-        Minimum movement distance required to trigger direction detection.
-        Smaller movements are ignored to prevent accidental direction changes.
-
-config PMW3610_DIRECTION_SHIFT_THRESHOLD
-    int "Threshold to shift direction"
-    default 50
-    help
-        Movement threshold for incremental direction shifts.
-        Movements below this threshold trigger fine-grained clockwise/counterclockwise
-        adjustments instead of absolute direction detection.
-
-# ========== END DYNAMIC ANGLE DETECTION CONFIGURATION ==========
-
 config PMW3610_BALL_ACTION_TICK
     int "PMW3610's required ticks to trigger a ball action"
     default 20
