@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: MIT
  */
 
+
+#include <stdint.h>
 #define DT_DRV_COMPAT pixart_pmw3610
 
 
