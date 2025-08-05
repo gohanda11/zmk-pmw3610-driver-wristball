@@ -472,6 +472,19 @@ static int pmw3610_async_init_configure(const struct device *dev) {
     LOG_INF("async_init_configure");
 
     int err = 0;
+    
+    // 初期角度を設定
+    if (IS_ENABLED(CONFIG_PMW3610_ORIENTATION_0)) {
+        current_orientation = 0;
+    } else if (IS_ENABLED(CONFIG_PMW3610_ORIENTATION_90)) {
+        current_orientation = 90;
+    } else if (IS_ENABLED(CONFIG_PMW3610_ORIENTATION_180)) {
+        current_orientation = 180;
+    } else if (IS_ENABLED(CONFIG_PMW3610_ORIENTATION_270)) {
+        current_orientation = 270;
+    } else {
+        current_orientation = 0; // デフォルト
+    }
 
     // clear motion registers first (required in datasheet)
     for (uint8_t reg = 0x02; (reg <= 0x05) && !err; reg++) {
@@ -597,6 +610,42 @@ static enum pixart_input_mode get_input_mode_for_current_layer(const struct devi
     return MOVE;
 }
 
+// グローバル変数で現在の角度を管理
+static uint16_t current_orientation = 0; // 0, 90, 180, 270
+
+// 外部からの角度変更関数
+void pmw3610_set_orientation(uint16_t orientation) {
+    current_orientation = orientation % 360;
+    LOG_INF("PMW3610 orientation changed to %d degrees", current_orientation);
+}
+
+// 角度変換を適用する関数
+static void apply_orientation_transform(int16_t raw_x, int16_t raw_y, int16_t *x, int16_t *y) {
+    switch(current_orientation) {
+        case 0:
+            *x = -raw_x;
+            *y = raw_y;
+            break;
+        case 90:
+            *x = raw_y;
+            *y = -raw_x;
+            break;
+        case 180:
+            *x = raw_x;
+            *y = -raw_y;
+            break;
+        case 270:
+            *x = -raw_y;
+            *y = raw_x;
+            break;
+        default:
+            // デフォルトは0度
+            *x = -raw_x;
+            *y = raw_y;
+            break;
+    }
+}
+
 static int pmw3610_report_data(const struct device *dev) {
     struct pixart_data *data = dev->data;
     uint8_t buf[PMW3610_BURST_SIZE];
@@ -662,19 +711,8 @@ static int pmw3610_report_data(const struct device *dev) {
     int16_t raw_y =
         TOINT16((buf[PMW3610_Y_L_POS] + ((buf[PMW3610_XY_H_POS] & 0x0F) << 8)), 12) / dividor;
 
-    if (IS_ENABLED(CONFIG_PMW3610_ORIENTATION_0)) {
-        x = -raw_x;
-        y = raw_y;
-    } else if (IS_ENABLED(CONFIG_PMW3610_ORIENTATION_90)) {
-        x = raw_y;
-        y = -raw_x;
-    } else if (IS_ENABLED(CONFIG_PMW3610_ORIENTATION_180)) {
-        x = raw_x;
-        y = -raw_y;
-    } else if (IS_ENABLED(CONFIG_PMW3610_ORIENTATION_270)) {
-        x = -raw_y;
-        y = raw_x;
-    }
+    // 動的角度変換を適用
+    apply_orientation_transform(raw_x, raw_y, &x, &y);
 
     if (IS_ENABLED(CONFIG_PMW3610_INVERT_X)) {
         x = -x;
