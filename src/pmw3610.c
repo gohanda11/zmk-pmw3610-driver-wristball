@@ -28,6 +28,14 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(pmw3610, CONFIG_INPUT_LOG_LEVEL);
 
+#include <math.h>
+#ifndef M_PI
+#define M_PI 3.1415926536
+#endif
+
+// Direction detection variables
+static uint8_t last_orientation_layer = 0;
+static uint8_t direction_angle = 0;
 
 //////// Sensor initialization steps definition //////////
 // init is done in non-blocking manner (i.e., async), a //
@@ -597,6 +605,128 @@ static enum pixart_input_mode get_input_mode_for_current_layer(const struct devi
     return MOVE;
 }
 
+// Direction detection and angle calculation functions
+static int calc_angle_in_range(int angle) {
+    while (angle < 0) {
+        angle += 360;
+    }
+    while (angle >= 360) {
+        angle -= 360;
+    }
+    return angle;
+}
+
+static int calc_angle_for_direction(int direction) {
+    int angle = direction * direction_angle;
+    return calc_angle_in_range(angle);
+}
+
+static void rotate_point(int16_t *x, int16_t *y, int angle) {
+    if (angle == 0) return;
+    
+    // Lookup table for sin/cos values (0-360 degrees)
+    static const float sin_lut[] = {
+        0.0000, 0.0175, 0.0349, 0.0523, 0.0698, 0.0872, 0.1045, 0.1219, 0.1392, 0.1564,
+        0.1736, 0.1908, 0.2079, 0.2250, 0.2419, 0.2588, 0.2756, 0.2924, 0.3090, 0.3256,
+        0.3420, 0.3584, 0.3746, 0.3907, 0.4067, 0.4226, 0.4384, 0.4540, 0.4695, 0.4848,
+        0.5000, 0.5150, 0.5299, 0.5446, 0.5592, 0.5736, 0.5878, 0.6018, 0.6157, 0.6293,
+        0.6428, 0.6561, 0.6691, 0.6820, 0.6947, 0.7071, 0.7193, 0.7314, 0.7431, 0.7547,
+        0.7660, 0.7771, 0.7880, 0.7986, 0.8090, 0.8192, 0.8290, 0.8387, 0.8480, 0.8572,
+        0.8660, 0.8746, 0.8829, 0.8910, 0.8988, 0.9063, 0.9135, 0.9205, 0.9272, 0.9336,
+        0.9397, 0.9455, 0.9511, 0.9563, 0.9613, 0.9659, 0.9703, 0.9744, 0.9781, 0.9816,
+        0.9848, 0.9877, 0.9903, 0.9925, 0.9945, 0.9962, 0.9976, 0.9986, 0.9994, 0.9998,
+        1.0000
+    };
+    
+    angle = angle % 360;
+    if (angle < 0) angle += 360;
+    
+    float sin_val, cos_val;
+    
+    if (angle <= 90) {
+        sin_val = sin_lut[angle];
+        cos_val = sin_lut[90 - angle];
+    } else if (angle <= 180) {
+        sin_val = sin_lut[180 - angle];
+        cos_val = -sin_lut[angle - 90];
+    } else if (angle <= 270) {
+        sin_val = -sin_lut[angle - 180];
+        cos_val = -sin_lut[270 - angle];
+    } else {
+        sin_val = -sin_lut[360 - angle];
+        cos_val = sin_lut[angle - 270];
+    }
+    
+    int16_t orig_x = *x;
+    int16_t orig_y = *y;
+    
+    *x = (int16_t)(orig_x * cos_val - orig_y * sin_val);
+    *y = (int16_t)(orig_x * sin_val + orig_y * cos_val);
+}
+
+static int detect_direction(const struct device *dev, int16_t x, int16_t y) {
+    struct pixart_data *data = dev->data;
+    static int64_t detection_start_time = 0;
+    static int64_t accumulated_x = 0;
+    static int64_t accumulated_y = 0;
+    static bool detection_active = false;
+    
+    // Get current layer
+    uint8_t current_layer = zmk_keymap_highest_layer_active();
+    
+    // Check if we're on the direction detection layer
+    if (current_layer == CONFIG_PMW3610_DIRECTION_DETECTION_LAYER) {
+        if (!detection_active) {
+            // Start detection
+            detection_active = true;
+            detection_start_time = k_uptime_get();
+            accumulated_x = 0;
+            accumulated_y = 0;
+        }
+        
+        // Accumulate movement
+        accumulated_x += x;
+        accumulated_y += y;
+        
+        // Check if detection time has elapsed
+        if (k_uptime_get() - detection_start_time >= CONFIG_PMW3610_DIRECTION_DETECTION_SAMPLE_TIME_MS) {
+            detection_active = false;
+            
+            // Calculate total distance
+            int64_t distance = sqrt(accumulated_x * accumulated_x + accumulated_y * accumulated_y);
+            
+            if (distance >= CONFIG_PMW3610_DIRECTION_DETECTION_DISTANCE_THRESHOLD) {
+                // Large movement - arbitrary direction detection
+                double angle_rad = atan2(accumulated_y, accumulated_x);
+                int angle_deg = (int)(angle_rad * 180.0 / M_PI);
+                angle_deg = calc_angle_in_range(angle_deg);
+                
+                // Convert to direction index
+                int new_direction = angle_deg / direction_angle;
+                return new_direction;
+            } else if (distance >= CONFIG_PMW3610_DIRECTION_SHIFT_THRESHOLD) {
+                // Small movement - incremental shift
+                uint8_t current_direction = data->current_orientation;
+                
+                if (accumulated_x > 0) {
+                    // Clockwise
+                    return (current_direction + 1) % (360 / direction_angle);
+                } else {
+                    // Counter-clockwise
+                    return (current_direction - 1 + (360 / direction_angle)) % (360 / direction_angle);
+                }
+            }
+        }
+        
+        // Return -1 to indicate no change during detection
+        return -1;
+    } else {
+        // Reset detection when not on detection layer
+        detection_active = false;
+        return -1;
+    }
+}
+
 static int pmw3610_report_data(const struct device *dev) {
     struct pixart_data *data = dev->data;
     uint8_t buf[PMW3610_BURST_SIZE];
@@ -715,6 +845,18 @@ static int pmw3610_report_data(const struct device *dev) {
         data->last_y = 0;
     }
 #endif
+
+    // Direction detection and coordinate rotation
+    int new_direction = detect_direction(dev, x, y);
+    if (new_direction >= 0) {
+        data->current_orientation = new_direction;
+        LOG_INF("Direction changed to %d (angle: %d degrees)", 
+                new_direction, calc_angle_for_direction(new_direction));
+    }
+    
+    // Apply coordinate rotation based on current orientation
+    int rotation_angle = calc_angle_for_direction(data->current_orientation);
+    rotate_point(&x, &y, rotation_angle);
 
     if (x != 0 || y != 0) {
         if (input_mode == MOVE || input_mode == SNIPE) {
@@ -851,6 +993,14 @@ static int pmw3610_init(const struct device *dev) {
 
     // init smart algorithm flag;
     data->sw_smart_flag = false;
+    
+    // init direction detection
+    data->current_orientation = 0;
+    direction_angle = CONFIG_PMW3610_DIRECTION_ANGLE;
+    // Ensure direction_angle is a divisor of 360
+    while (360 % direction_angle != 0) {
+        direction_angle++;
+    }
 
     // init trigger handler work
     k_work_init(&data->trigger_work, pmw3610_work_callback);
