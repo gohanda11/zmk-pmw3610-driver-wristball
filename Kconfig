@@ -173,20 +173,6 @@ config PMW3610_BALL_ACTION_TICK
     help
         Ball action tick value. Higher values require more movement to trigger a ball action.
 
-config PMW3610_DIRECTION_THRESHOLD
-    int "PMW3610's direction detection threshold"
-    default 100
-    help
-        Movement threshold for direction detection. Higher values require more movement
-        to detect and switch direction.
-
-config PMW3610_DIRECTION_ANGLE_STEP
-    int "PMW3610's direction angle step in degrees"
-    default 90
-    range 45 180
-    help
-        Angle step for direction switching in degrees. Common values are 45, 90, or 180.
-
 module = PMW3610
 module-str = PMW3610
 source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"

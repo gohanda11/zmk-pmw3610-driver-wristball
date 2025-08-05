@@ -28,15 +28,6 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(pmw3610, CONFIG_INPUT_LOG_LEVEL);
 
-#include <math.h>
-
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
-
-#define DIRECTION_THRESHOLD CONFIG_PMW3610_DIRECTION_THRESHOLD
-#define DIRECTION_ANGLE_STEP CONFIG_PMW3610_DIRECTION_ANGLE_STEP
-
 
 //////// Sensor initialization steps definition //////////
 // init is done in non-blocking manner (i.e., async), a //
@@ -581,59 +572,10 @@ K_TIMER_DEFINE(automouse_layer_timer, deactivate_automouse_layer, NULL);
 #endif
 
 int ball_action_idx = -1;
-
-static uint16_t detect_direction(int32_t delta_x, int32_t delta_y) {
-    if (abs(delta_x) < DIRECTION_THRESHOLD && abs(delta_y) < DIRECTION_THRESHOLD) {
-        return 0xFFFF; // No direction detected
-    }
-    
-    // 下から上への回転を検出（-Y方向が強い場合）
-    // 単純な方向検出：絶対値で比較
-    if (abs(delta_y) > abs(delta_x) && delta_y < 0) {
-        return 270; // 上向き
-    }
-    
-    return 0xFFFF; // 指定方向以外
-}
-
-static void rotate_coordinates(int16_t *x, int16_t *y, uint16_t angle_deg) {
-    if (angle_deg == 0) return;
-    
-    // 90度単位での回転のみをサポート（浮動小数点演算を避ける）
-    int16_t orig_x = *x;
-    int16_t orig_y = *y;
-    
-    switch (angle_deg) {
-    case 90:
-        *x = -orig_y;
-        *y = orig_x;
-        break;
-    case 180:
-        *x = -orig_x;
-        *y = -orig_y;
-        break;
-    case 270:
-        *x = orig_y;
-        *y = -orig_x;
-        break;
-    default:
-        // その他の角度は無視
-        break;
-    }
-}
-
 static enum pixart_input_mode get_input_mode_for_current_layer(const struct device *dev) {
     const struct pixart_config *config = dev->config;
     uint8_t curr_layer = zmk_keymap_highest_layer_active();
     ball_action_idx = -1;
-    
-    // レイヤー6での方向検出をチェック
-    for (size_t i = 0; i < config->direction_detect_layers_len; i++) {
-        if (curr_layer == config->direction_detect_layers[i]) {
-            return DIRECTION_DETECT;
-        }
-    }
-    
     for (size_t i = 0; i < config->scroll_layers_len; i++) {
         if (curr_layer == config->scroll_layers[i]) {
             return SCROLL;
@@ -692,14 +634,6 @@ static int pmw3610_report_data(const struct device *dev) {
         }
         dividor = 1;
         break;
-    case DIRECTION_DETECT:
-        set_cpi_if_needed(dev, CONFIG_PMW3610_CPI);
-        if (input_mode_changed) {
-            data->direction_delta_x = 0;
-            data->direction_delta_y = 0;
-        }
-        dividor = CONFIG_PMW3610_CPI_DIVIDOR;
-        break;
     default:
         return -ENOTSUP;
     }
@@ -748,31 +682,6 @@ static int pmw3610_report_data(const struct device *dev) {
 
     if (IS_ENABLED(CONFIG_PMW3610_INVERT_Y)) {
         y = -y;
-    }
-    
-    // 方向検出モードでの処理
-    if (input_mode == DIRECTION_DETECT) {
-        data->direction_delta_x += x;
-        data->direction_delta_y += y;
-        
-        uint16_t detected_angle = detect_direction(data->direction_delta_x, data->direction_delta_y);
-        if (detected_angle != 0xFFFF) {
-            // 角度を90度単位に丸める
-            uint16_t new_angle = ((detected_angle + 45) / DIRECTION_ANGLE_STEP) * DIRECTION_ANGLE_STEP;
-            if (new_angle != data->current_rotation_angle) {
-                data->current_rotation_angle = new_angle;
-                LOG_INF("Direction switched to angle: %d", new_angle);
-            }
-            // デルタをリセット
-            data->direction_delta_x = 0;
-            data->direction_delta_y = 0;
-        }
-        return 0; // 方向検出モードでは通常の入力は送信しない
-    }
-    
-    // 現在の回転角度を適用
-    if (data->current_rotation_angle != 0) {
-        rotate_coordinates(&x, &y, data->current_rotation_angle);
     }
 
 #ifdef CONFIG_PMW3610_SMART_ALGORITHM
@@ -1006,7 +915,6 @@ DT_INST_FOREACH_CHILD(0, BALL_ACTIONS_INST)
     static struct pixart_data data##n;                                                             \
     static int32_t scroll_layers##n[] = DT_PROP(DT_DRV_INST(n), scroll_layers);                    \
     static int32_t snipe_layers##n[] = DT_PROP(DT_DRV_INST(n), snipe_layers);                      \
-    static int32_t direction_detect_layers##n[] = DT_PROP_OR(DT_DRV_INST(n), direction_detect_layers, {6}); \
     static struct ball_action_cfg *ball_actions[] = {DT_INST_FOREACH_CHILD(0, BALL_ACTIONS_ITEM)}; \
     static const struct pixart_config config##n = {                                                \
         .irq_gpio = GPIO_DT_SPEC_INST_GET(n, irq_gpios),                                           \
@@ -1026,8 +934,6 @@ DT_INST_FOREACH_CHILD(0, BALL_ACTIONS_INST)
         .scroll_layers_len = DT_PROP_LEN(DT_DRV_INST(n), scroll_layers),                           \
         .snipe_layers = snipe_layers##n,                                                           \
         .snipe_layers_len = DT_PROP_LEN(DT_DRV_INST(n), snipe_layers),                             \
-        .direction_detect_layers = direction_detect_layers##n,                                     \
-        .direction_detect_layers_len = DT_PROP_LEN_OR(DT_DRV_INST(n), direction_detect_layers, 1), \
         .ball_actions = ball_actions,                                                              \
         .ball_actions_len = BALL_ACTIONS_LEN,                                                      \
     };                                                                                             \
