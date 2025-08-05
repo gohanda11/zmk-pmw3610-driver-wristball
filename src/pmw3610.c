@@ -674,6 +674,14 @@ static int detect_direction(const struct device *dev, int16_t x, int16_t y) {
     // Get current layer
     uint8_t current_layer = zmk_keymap_highest_layer_active();
     
+    // Debug: Always log layer and movement info
+    static uint8_t last_logged_layer = 255;
+    if (current_layer != last_logged_layer || (x != 0 || y != 0)) {
+        LOG_INF("Layer: %d, Movement: x=%d y=%d, Detection layer: %d", 
+                current_layer, x, y, CONFIG_PMW3610_DIRECTION_DETECTION_LAYER);
+        last_logged_layer = current_layer;
+    }
+    
     // Check if we're on the direction detection layer
     if (current_layer == CONFIG_PMW3610_DIRECTION_DETECTION_LAYER) {
         if (!detection_active) {
@@ -682,18 +690,25 @@ static int detect_direction(const struct device *dev, int16_t x, int16_t y) {
             detection_start_time = k_uptime_get();
             accumulated_x = 0;
             accumulated_y = 0;
+            LOG_INF("Direction detection STARTED on layer %d", current_layer);
         }
         
         // Accumulate movement
         accumulated_x += x;
         accumulated_y += y;
+        LOG_INF("Accumulating: x=%lld y=%lld (delta: x=%d y=%d)", 
+                accumulated_x, accumulated_y, x, y);
         
         // Check if detection time has elapsed
-        if (k_uptime_get() - detection_start_time >= CONFIG_PMW3610_DIRECTION_DETECTION_SAMPLE_TIME_MS) {
+        int64_t elapsed_time = k_uptime_get() - detection_start_time;
+        if (elapsed_time >= CONFIG_PMW3610_DIRECTION_DETECTION_SAMPLE_TIME_MS) {
             detection_active = false;
             
             // Calculate total distance
             int64_t distance = sqrt(accumulated_x * accumulated_x + accumulated_y * accumulated_y);
+            LOG_INF("Detection COMPLETED: distance=%lld, thresholds: large=%d, small=%d", 
+                    distance, CONFIG_PMW3610_DIRECTION_DETECTION_DISTANCE_THRESHOLD, 
+                    CONFIG_PMW3610_DIRECTION_SHIFT_THRESHOLD);
             
             if (distance >= CONFIG_PMW3610_DIRECTION_DETECTION_DISTANCE_THRESHOLD) {
                 // Large movement - arbitrary direction detection
@@ -703,18 +718,28 @@ static int detect_direction(const struct device *dev, int16_t x, int16_t y) {
                 
                 // Convert to direction index
                 int new_direction = angle_deg / direction_angle;
+                LOG_INF("LARGE movement detected: angle=%d deg, new_direction=%d", 
+                        angle_deg, new_direction);
                 return new_direction;
             } else if (distance >= CONFIG_PMW3610_DIRECTION_SHIFT_THRESHOLD) {
                 // Small movement - incremental shift
                 uint8_t current_direction = data->current_orientation;
+                int new_direction;
                 
                 if (accumulated_x > 0) {
                     // Clockwise
-                    return (current_direction + 1) % (360 / direction_angle);
+                    new_direction = (current_direction + 1) % (360 / direction_angle);
+                    LOG_INF("SMALL movement clockwise: %d -> %d", current_direction, new_direction);
                 } else {
                     // Counter-clockwise
-                    return (current_direction - 1 + (360 / direction_angle)) % (360 / direction_angle);
+                    new_direction = (current_direction - 1 + (360 / direction_angle)) % (360 / direction_angle);
+                    LOG_INF("SMALL movement counter-clockwise: %d -> %d", current_direction, new_direction);
                 }
+                return new_direction;
+            } else {
+                LOG_INF("Movement too small: distance=%lld (thresholds: %d/%d)", 
+                        distance, CONFIG_PMW3610_DIRECTION_SHIFT_THRESHOLD, 
+                        CONFIG_PMW3610_DIRECTION_DETECTION_DISTANCE_THRESHOLD);
             }
         }
         
@@ -856,7 +881,13 @@ static int pmw3610_report_data(const struct device *dev) {
     
     // Apply coordinate rotation based on current orientation
     int rotation_angle = calc_angle_for_direction(data->current_orientation);
+    int16_t orig_x = x, orig_y = y;
     rotate_point(&x, &y, rotation_angle);
+    
+    if (rotation_angle != 0 && (orig_x != 0 || orig_y != 0)) {
+        LOG_INF("Coordinate rotation: (%d,%d) -> (%d,%d) at %d degrees", 
+                orig_x, orig_y, x, y, rotation_angle);
+    }
 
     if (x != 0 || y != 0) {
         if (input_mode == MOVE || input_mode == SNIPE) {
@@ -1001,6 +1032,8 @@ static int pmw3610_init(const struct device *dev) {
     while (360 % direction_angle != 0) {
         direction_angle++;
     }
+    LOG_INF("Direction detection initialized: angle=%d, detection_layer=%d, directions=%d", 
+            direction_angle, CONFIG_PMW3610_DIRECTION_DETECTION_LAYER, 360/direction_angle);
 
     // init trigger handler work
     k_work_init(&data->trigger_work, pmw3610_work_callback);
