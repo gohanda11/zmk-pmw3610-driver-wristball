@@ -872,6 +872,12 @@ static int pmw3610_report_data(const struct device *dev) {
 #endif
 
     // Direction detection and coordinate rotation
+    // Debug: Log actual movement before direction detection
+    uint8_t current_layer = zmk_keymap_highest_layer_active();
+    if (current_layer == CONFIG_PMW3610_DIRECTION_DETECTION_LAYER && (x != 0 || y != 0)) {
+        LOG_ERR("Raw movement on layer %d: x=%d y=%d", current_layer, x, y);
+    }
+    
     int new_direction = detect_direction(dev, x, y);
     if (new_direction >= 0) {
         data->current_orientation = new_direction;
