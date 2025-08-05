@@ -59,10 +59,13 @@ static const struct behavior_driver_api behavior_pmw_rotation_driver_api = {
     .binding_released = on_keymap_binding_released,
 };
 
-static struct behavior_pmw_rotation_data behavior_pmw_rotation_data_0 = {};
-static const struct behavior_pmw_rotation_config behavior_pmw_rotation_config_0 = {};
 
-BEHAVIOR_DT_INST_DEFINE(0, behavior_pmw_rotation_init, NULL,
-                        &behavior_pmw_rotation_data_0, &behavior_pmw_rotation_config_0,
-                        POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,
-                        &behavior_pmw_rotation_driver_api);
+#define DEFINE_PMW_ROTATION(inst) \
+    static struct behavior_pmw_rotation_data behavior_pmw_rotation_data_##inst = {}; \
+    static const struct behavior_pmw_rotation_config behavior_pmw_rotation_config_##inst = {}; \
+    BEHAVIOR_DT_INST_DEFINE(inst, behavior_pmw_rotation_init, NULL, \
+        &behavior_pmw_rotation_data_##inst, &behavior_pmw_rotation_config_##inst, \
+        POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT, \
+        &behavior_pmw_rotation_driver_api);
+
+DT_INST_FOREACH_STATUS_OKAY(DEFINE_PMW_ROTATION)
