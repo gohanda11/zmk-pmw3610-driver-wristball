@@ -5,6 +5,6 @@ compatible: "zmk,behavior-pmw-rotation"
 include: base.yaml
 
 properties:
-  #binding-cells:
+  "#binding-cells":
     type: int
     const: 0
