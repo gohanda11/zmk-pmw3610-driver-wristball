@@ -173,41 +173,6 @@ config PMW3610_BALL_ACTION_TICK
     help
         Ball action tick value. Higher values require more movement to trigger a ball action.
 
-config PMW3610_DIRECTION_DETECTION_SAMPLE_TIME_MS
-    int "Sample time for direction detection"
-    default 100
-    help
-        Time window in milliseconds for detecting trackball direction movement.
-
-config PMW3610_DIRECTION_DETECTION_DISTANCE_THRESHOLD
-    int "Threshold of distance for direction detection"
-    default 1000
-    help
-        Distance threshold in pixels for arbitrary direction switching.
-        Higher values require more movement to trigger direction change.
-
-config PMW3610_DIRECTION_SHIFT_THRESHOLD
-    int "Threshold to shift direction"
-    default 300
-    help
-        Distance threshold in pixels for rotational direction switching.
-        Used for small incremental direction changes.
-
-config PMW3610_DIRECTION_DETECTION_LAYER
-    int "Layer to enable direction detection"
-    default 11
-    help
-        Keyboard layer number on which direction detection is active.
-        Switch to this layer to change trackball orientation.
-
-config PMW3610_DIRECTION_ANGLE
-    int "Angle of each direction"
-    default 45
-    range 3 45
-    help
-        Angle in degrees for each direction step. Default 45 degrees provides
-        8 directions (360/45). Must be a divisor of 360.
-
 module = PMW3610
 module-str = PMW3610
 source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"

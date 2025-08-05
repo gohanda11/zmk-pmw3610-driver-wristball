@@ -50,9 +50,6 @@ struct pixart_data {
 
     // for pmw3610 smart algorithm
     bool sw_smart_flag;
-    
-    // for direction detection
-    uint8_t current_orientation;
 };
 
 // ball action config data structure
