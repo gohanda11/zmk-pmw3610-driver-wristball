@@ -1032,7 +1032,7 @@ static int pmw3610_init(const struct device *dev) {
     while (360 % direction_angle != 0) {
         direction_angle++;
     }
-    LOG_INF("Direction detection initialized: angle=%d, detection_layer=%d, directions=%d", 
+    LOG_ERR("Direction detection initialized: angle=%d, detection_layer=%d, directions=%d", 
             direction_angle, CONFIG_PMW3610_DIRECTION_DETECTION_LAYER, 360/direction_angle);
 
     // init trigger handler work
