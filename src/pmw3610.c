@@ -6,6 +6,10 @@
 
 #define DT_DRV_COMPAT pixart_pmw3610
 
+
+// グローバル変数で現在の角度を管理
+static uint16_t current_orientation = 0; // 0, 90, 180, 270
+
 // 12-bit two's complement value to int16_t
 // adapted from https://stackoverflow.com/questions/70802306/convert-a-12-bit-signed-number-in-c
 #define TOINT16(val, bits) (((struct { int16_t value : bits; }){val}).value)
@@ -610,8 +614,7 @@ static enum pixart_input_mode get_input_mode_for_current_layer(const struct devi
     return MOVE;
 }
 
-// グローバル変数で現在の角度を管理
-static uint16_t current_orientation = 0; // 0, 90, 180, 270
+
 
 // 外部からの角度変更関数
 void pmw3610_set_orientation(uint16_t orientation) {
