@@ -674,6 +674,11 @@ void pmw3610_set_orientation(uint16_t orientation) {
     save_orientation_to_settings();
 }
 
+// 現在の角度を取得する関数
+uint16_t pmw3610_get_orientation(void) {
+    return current_orientation;
+}
+
 // 角度変換を適用する関数
 static void apply_orientation_transform(int16_t raw_x, int16_t raw_y, int16_t *x, int16_t *y) {
     switch(current_orientation) {

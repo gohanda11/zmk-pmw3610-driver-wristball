@@ -135,6 +135,10 @@ extern "C" {
 #define PMW3610_SCROLL_Y_POSITIVE 1
 #endif
 
+// 外部関数宣言
+void pmw3610_set_orientation(uint16_t orientation);
+uint16_t pmw3610_get_orientation(void);
+
 #ifdef __cplusplus
 }
 #endif

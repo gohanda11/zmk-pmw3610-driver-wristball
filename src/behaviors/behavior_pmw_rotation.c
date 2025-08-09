@@ -17,8 +17,9 @@
 
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
-// PMW3610ドライバーの角度変更関数を外部宣言
+// PMW3610ドライバーの関数を外部宣言
 extern void pmw3610_set_orientation(uint16_t orientation);
+extern uint16_t pmw3610_get_orientation(void);
 
 struct behavior_pmw_rotation_config {};
 
@@ -37,13 +38,19 @@ static int on_keymap_binding_pressed(struct zmk_behavior_binding *binding,
     const struct device *dev = zmk_behavior_get_binding(binding->behavior_dev);
     struct behavior_pmw_rotation_data *data = dev->data;
 
+    // PMW3610ドライバーから現在の角度を取得
+    uint16_t current_angle = pmw3610_get_orientation();
+    
     // 角度を90度ずつ回転: 0 -> 90 -> 180 -> 270 -> 0
-    data->current_rotation = (data->current_rotation + 90) % 360;
+    uint16_t new_angle = (current_angle + 90) % 360;
     
     // PMW3610ドライバーに新しい角度を設定
-    pmw3610_set_orientation(data->current_rotation);
+    pmw3610_set_orientation(new_angle);
     
-    LOG_INF("PMW rotation changed to %d degrees", data->current_rotation);
+    // ビヘイビアのデータも更新（同期保持のため）
+    data->current_rotation = new_angle;
+    
+    LOG_INF("PMW rotation changed from %d to %d degrees", current_angle, new_angle);
 
     return ZMK_BEHAVIOR_OPAQUE;
 }
