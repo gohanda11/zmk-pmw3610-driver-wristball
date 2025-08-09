@@ -632,7 +632,7 @@ static void apply_orientation_transform(int16_t raw_x, int16_t raw_y, int16_t *x
             *y = raw_y;
             break;
         case 90:
-            *x = raw_y;
+            *x = -raw_y;
             *y = -raw_x;
             break;
         case 180:
@@ -640,7 +640,7 @@ static void apply_orientation_transform(int16_t raw_x, int16_t raw_y, int16_t *x
             *y = -raw_y;
             break;
         case 270:
-            *x = -raw_y;
+            *x = raw_y;
             *y = raw_x;
             break;
         default:
