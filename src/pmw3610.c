@@ -6,6 +6,7 @@
 
 
 #include <stdint.h>
+#include <stdbool.h>
 #define DT_DRV_COMPAT pixart_pmw3610
 
 
