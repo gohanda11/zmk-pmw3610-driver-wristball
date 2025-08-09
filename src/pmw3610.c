@@ -11,6 +11,7 @@
 
 // グローバル変数で現在の角度を管理
 static uint16_t current_orientation = 0; // 0, 90, 180, 270
+static bool orientation_loaded_from_settings = false;
 
 // 12-bit two's complement value to int16_t
 // adapted from https://stackoverflow.com/questions/70802306/convert-a-12-bit-signed-number-in-c
@@ -21,6 +22,7 @@ static uint16_t current_orientation = 0; // 0, 90, 180, 270
 #include <zephyr/input/input.h>
 #include <zephyr/device.h>
 #include <zephyr/sys/dlist.h>
+#include <zephyr/settings/settings.h>
 #include <drivers/behavior.h>
 #include <zmk/keymap.h>
 #include <zmk/behavior.h>
@@ -33,6 +35,34 @@ static uint16_t current_orientation = 0; // 0, 90, 180, 270
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(pmw3610, CONFIG_INPUT_LOG_LEVEL);
+
+// Settings key for storing orientation
+#define PMW3610_SETTINGS_ORIENTATION_KEY "pmw3610/orientation"
+
+// Settings handler for loading saved orientation
+static int pmw3610_settings_handler(const char *key, size_t len, settings_read_cb read_cb,
+                                   void *cb_arg) {
+    const char *next;
+    if (settings_name_steq(key, "orientation", &next) && !next) {
+        if (len != sizeof(current_orientation)) {
+            LOG_WRN("Invalid orientation settings size: %d", len);
+            return -EINVAL;
+        }
+        
+        int ret = read_cb(cb_arg, &current_orientation, sizeof(current_orientation));
+        if (ret >= 0) {
+            current_orientation = current_orientation % 360;  // 範囲チェック
+            orientation_loaded_from_settings = true;
+            LOG_INF("Loaded orientation from settings: %d degrees", current_orientation);
+        } else {
+            LOG_WRN("Failed to read orientation from settings: %d", ret);
+        }
+        return ret;
+    }
+    return 0;
+}
+
+SETTINGS_STATIC_HANDLER_DEFINE(pmw3610, "pmw3610", NULL, pmw3610_settings_handler, NULL, NULL);
 
 
 //////// Sensor initialization steps definition //////////
@@ -479,17 +509,22 @@ static int pmw3610_async_init_configure(const struct device *dev) {
 
     int err = 0;
     
-    // 初期角度を設定
-    if (IS_ENABLED(CONFIG_PMW3610_ORIENTATION_0)) {
-        current_orientation = 0;
-    } else if (IS_ENABLED(CONFIG_PMW3610_ORIENTATION_90)) {
-        current_orientation = 90;
-    } else if (IS_ENABLED(CONFIG_PMW3610_ORIENTATION_180)) {
-        current_orientation = 180;
-    } else if (IS_ENABLED(CONFIG_PMW3610_ORIENTATION_270)) {
-        current_orientation = 270;
+    // 初期角度を設定 (settingsで読み込まれていない場合のみ設定)
+    if (!orientation_loaded_from_settings) {
+        if (IS_ENABLED(CONFIG_PMW3610_ORIENTATION_0)) {
+            current_orientation = 0;
+        } else if (IS_ENABLED(CONFIG_PMW3610_ORIENTATION_90)) {
+            current_orientation = 90;
+        } else if (IS_ENABLED(CONFIG_PMW3610_ORIENTATION_180)) {
+            current_orientation = 180;
+        } else if (IS_ENABLED(CONFIG_PMW3610_ORIENTATION_270)) {
+            current_orientation = 270;
+        } else {
+            current_orientation = 0; // デフォルト
+        }
+        LOG_INF("Using default orientation: %d degrees", current_orientation);
     } else {
-        current_orientation = 0; // デフォルト
+        LOG_INF("Using saved orientation: %d degrees", current_orientation);
     }
 
     // clear motion registers first (required in datasheet)
@@ -618,10 +653,24 @@ static enum pixart_input_mode get_input_mode_for_current_layer(const struct devi
 
 
 
+// 角度をNVSに保存
+static void save_orientation_to_settings(void) {
+    int ret = settings_save_one(PMW3610_SETTINGS_ORIENTATION_KEY, 
+                                &current_orientation, sizeof(current_orientation));
+    if (ret) {
+        LOG_WRN("Failed to save orientation to settings: %d", ret);
+    } else {
+        LOG_DBG("Orientation %d degrees saved to settings", current_orientation);
+    }
+}
+
 // 外部からの角度変更関数
 void pmw3610_set_orientation(uint16_t orientation) {
     current_orientation = orientation % 360;
     LOG_INF("PMW3610 orientation changed to %d degrees", current_orientation);
+    
+    // 設定を非同期で保存
+    save_orientation_to_settings();
 }
 
 // 角度変換を適用する関数
